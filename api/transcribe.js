@@ -43,7 +43,7 @@ async function transcribeWithWhisper(fileBuffer, originalName, mimeType) {
   return data.text;
 }
 
-// ─── Helper: GPT-4o-mini סיכום ─────────────────────────────────────────────
+// ─── Helper: GPT-4o-mini סיכום משודרג וחכם ─────────────────────────────────────────────
 async function summarizeWithGPT(transcript) {
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
@@ -52,14 +52,21 @@ async function summarizeWithGPT(transcript) {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "gpt-4o-mini",
+      model: "gpt-4o-mini", // אפשר לשנות ל-gpt-4o אם רוצים רמה עוד יותר גבוהה (ויקר יותר)
       messages: [
         {
           role: "system",
-          content: "You are a helpful assistant. Summarize the following transcript in Hebrew. Provide 3 clear bullet points."
+          content: `אתה עוזר אישי אינטליגנטי. תפקידך לסכם תמלול של הקלטה קולית בעברית.
+          הסיכום צריך להיות:
+          1. כותרת קולעת ומקצועית.
+          2. תקציר של "בשורה התחתונה" (2-3 משפטים).
+          3. רשימת בולטים של נקודות המפתח החשובות ביותר.
+          4. אם נאמרו משימות לביצוע או תאריכים - ציין אותם בנפרד.
+          השתמש בשפה עשירה, רשמית וברורה. אל תחזור על מילים מיותרות מהתמלול.`
         },
-        { role: "user", content: transcript },
+        { role: "user", content: `זה התמלול: ${transcript}` },
       ],
+      temperature: 0.7, // מוסיף קצת "יצירתיות" וזרימה לטקסט
     }),
   });
 

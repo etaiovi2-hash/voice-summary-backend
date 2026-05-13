@@ -1,24 +1,21 @@
 import express from "express";
 import multer from "multer";
-import fs from "fs";
-import path from "path";
-import os from "os";
 import FormData from "form-data";
 import fetch from "node-fetch";
 
 const app = express();
 
-// ─── Multer: זיכרון זמני ─────────────────────────────────────
+// תמיכה בקבלת JSON (בשביל ה-AI Agent)
+app.use(express.json());
+
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 }, // הגדלתי ל-10MB ליתר ביטחון
+  limits: { fileSize: 15 * 1024 * 1024 }, // 15MB
 });
 
-// ─── Helper: Whisper API ────────────────────────────────────────────────────
+// --- Helper: Whisper API ---
 async function transcribeWithWhisper(fileBuffer, originalName, mimeType) {
   const form = new FormData();
-  
-  // אנחנו שולחים את ה-buffer ישירות בלי המרה
   form.append("file", fileBuffer, {
     filename: originalName || "audio.mp3",
     contentType: mimeType || "audio/mpeg",
@@ -43,8 +40,16 @@ async function transcribeWithWhisper(fileBuffer, originalName, mimeType) {
   return data.text;
 }
 
-// ─── Helper: GPT-4o-mini סיכום משודרג וחכם ─────────────────────────────────────────────
-async function summarizeWithGPT(transcript) {
+// --- Helper: GPT-4o-mini (סוכן חכם שמשמש גם לסיכום וגם למשימות) ---
+async function askGPT(transcript, task = "summarize") {
+  let systemPrompt = "";
+  
+  if (task === "summarize") {
+    systemPrompt = `אתה עוזר אישי חכם שכותב בגובה העיניים. סכם את ההקלטה בצורה זורמת, אנושית וקלילה.`;
+  } else {
+    systemPrompt = `אתה AI Agent מקצועי. השתמש בתמלול המצורף כדי לבצע את המשימה שהמשתמש ביקש: ${task}. תענה בצורה ישירה ומדויקת.`;
+  }
+
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: {
@@ -52,49 +57,45 @@ async function summarizeWithGPT(transcript) {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "gpt-4o-mini", // אפשר לשנות ל-gpt-4o אם רוצים רמה עוד יותר גבוהה (ויקר יותר)
+      model: "gpt-4o-mini",
       messages: [
-        {
-          role: "system",
-          content: `אתה עוזר אישי חכם שכותב בגובה העיניים. התפקיד שלך הוא לסכם הקלטות קוליות בצורה זורמת ואנושית.
-          הנחיות לכתיבה:
-          1. אל תשתמש בכותרות רשמיות ונוקשות כמו "בשורה התחתונה".
-          2. תכתוב פסקה קצרה ותכל'סית שמסבירה מה קרה בהקלטה כאילו אתה מספר לחבר מה הוא פספס.
-          3. אם יש פרטים קריטיים (כמו תאריכים או משימות), תציין אותם בסוף בצורה חברית (למשל: "אה, וצריך לזכור ש...").
-          4. השתמש בשפה יומיומית וקלילה, אבל עדיין ברורה ומקצועית. בלי חפירות מיותרות.`
-        },
-        { role: "user", content: `זה מה שנאמר בהקלטה: ${transcript}` },
+        { role: "system", content: systemPrompt },
+        { role: "user", content: `הנה הטקסט: ${transcript}` },
       ],
-      temperature: 0.8, // העליתי קצת כדי שיהיה פחות מקובע
+      temperature: 0.7,
     }),
   });
 
   const data = await res.json();
+  if (data.error) throw new Error(data.error.message);
   return data.choices[0].message.content;
 }
 
-// ─── Route: POST /api/transcribe ───────────────────────────────────────────
+// --- Route: POST /api/transcribe ---
 app.post("/api/transcribe", upload.single("audio"), async (req, res) => {
-  if (!req.file) {
-    return res.status(400).json({ error: "No audio file provided." });
-  }
-
-  if (!process.env.OPENAI_API_KEY) {
-    return res.status(500).json({ error: "OPENAI_API_KEY is not configured." });
-  }
+  // בדיקה אם קיבלנו קובץ או פקודת טקסט (AI Agent)
+  const isAgentTask = req.body && req.body.text && req.body.task;
 
   try {
-    // שלב 1: תמלול ישיר מה-Buffer (בלי ffmpeg!)
+    if (!process.env.OPENAI_API_KEY) throw new Error("API Key missing");
+
+    // מוד 1: AI Agent (משימה על טקסט קיים)
+    if (isAgentTask) {
+      const answer = await askGPT(req.body.text, req.body.task);
+      return res.status(200).json({ answer });
+    }
+
+    // מוד 2: העלאת קובץ ותמלול (מה שהיה קודם)
+    if (!req.file) return res.status(400).json({ error: "No audio file provided." });
+
     const transcript = await transcribeWithWhisper(
       req.file.buffer,
       req.file.originalname,
       req.file.mimetype
     );
 
-    // שלב 2: סיכום
-    const summary = await summarizeWithGPT(transcript);
+    const summary = await askGPT(transcript, "summarize");
 
-    // שלב 3: החזרת תשובה
     return res.status(200).json({ 
       transcript: transcript,
       summary: summary 
@@ -102,11 +103,10 @@ app.post("/api/transcribe", upload.single("audio"), async (req, res) => {
 
   } catch (err) {
     console.error("Error:", err);
-    return res.status(500).json({ error: err.message || "Internal server error" });
+    return res.status(500).json({ error: err.message });
   }
 });
 
-// Health check
-app.get("/api/transcribe", (req, res) => res.json({ status: "ok" }));
+app.get("/api/transcribe", (req, res) => res.json({ status: "Agent Ready" }));
 
 export default app;

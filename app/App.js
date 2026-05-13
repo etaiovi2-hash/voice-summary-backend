@@ -1,211 +1,187 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { 
-  StyleSheet, Text, View, TouchableOpacity, ActivityIndicator, 
-  ScrollView, Share, SafeAreaView, StatusBar, Alert, Dimensions 
+  StyleSheet, Text, View, TouchableOpacity, ScrollView, 
+  ActivityIndicator, Alert, Share, TextInput, KeyboardAvoidingView, Platform 
 } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const { width } = Dimensions.get('window');
-const API_URL = "https://voice-summary-app.vercel.app/api/transcribe";
+// הכתובת המעודכנת מהדפלוימנט האחרון שלך
+const API_URL = "https://voice-summary-backend.vercel.app/api/transcribe";
 
 export default function App() {
-  const [showWelcome, setShowWelcome] = useState(true);
   const [loading, setLoading] = useState(false);
-  const [loadingStep, setLoadingStep] = useState(0);
-  const [history, setHistory] = useState([]);
+  const [result, setResult] = useState(null); 
+  const [status, setStatus] = useState('');
+  const [agentTask, setAgentTask] = useState(''); 
+  const [agentResult, setAgentResult] = useState(''); 
 
-  const loadingMessages = ["מנתח את האודיו...", "מתרגם לטקסט...", "ה-AI מנסח סיכום...", "מלטש פרטים אחרונים..."];
-
-  useEffect(() => { loadHistory(); }, []);
-
-  useEffect(() => {
-    let interval;
-    if (loading) {
-      interval = setInterval(() => {
-        setLoadingStep((prev) => (prev + 1) % loadingMessages.length);
-      }, 1500);
-    } else {
-      setLoadingStep(0);
-    }
-    return () => clearInterval(interval);
-  }, [loading]);
-
-  const loadHistory = async () => {
-    const saved = await AsyncStorage.getItem('summary_history');
-    if (saved) setHistory(JSON.parse(saved));
-  };
-
-  const deleteItem = (id) => {
-    Alert.alert("מחיקה", "להסיר את הסיכום מההיסטוריה?", [
-      { text: "ביטול", style: "cancel" },
-      { text: "מחק", onPress: async () => {
-        const updated = history.filter(item => item.id !== id);
-        setHistory(updated);
-        await AsyncStorage.setItem('summary_history', JSON.stringify(updated));
-      }, style: 'destructive' }
-    ]);
-  };
-
-  const handleUpload = async (file) => {
-    setLoading(true);
+  const pickDocument = async () => {
     try {
-      const formData = new FormData();
-      
-      formData.append('audio', {
-        uri: file.uri,
-        type: 'audio/mpeg', 
-        name: 'recording.mp3', 
+      const res = await DocumentPicker.getDocumentAsync({
+        type: ['audio/*', 'video/*'],
+        copyToCacheDirectory: true
       });
+      if (!res.canceled) uploadFile(res.assets[0]);
+    } catch (err) {
+      Alert.alert('שגיאה', 'לא הצלחנו לבחור קובץ');
+    }
+  };
 
+  const uploadFile = async (file) => {
+    setLoading(true);
+    setStatus('מעבד את האודיו...');
+    const formData = new FormData();
+    formData.append('audio', {
+      uri: file.uri,
+      name: file.name,
+      type: file.mimeType || 'audio/mpeg',
+    });
+
+    try {
       const response = await fetch(API_URL, {
         method: 'POST',
         body: formData,
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'multipart/form-data',
-        },
+        headers: { 'Accept': 'application/json' },
       });
-
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'שגיאת שרת');
+      if (data.error) throw new Error(data.error);
+      setResult(data);
+    } catch (err) {
+      Alert.alert('שגיאה בעיבוד', err.message);
+    } finally {
+      setLoading(false);
+      setStatus('');
+    }
+  };
 
-      // יצירת האובייקט החדש עם התמלול והסיכום
-      const newEntry = {
-        id: Date.now().toString(),
-        summary: data.summary,
-        transcript: data.transcript, 
-        fileName: file.name,
-        date: new Date().toLocaleDateString(),
-        tag: "סיכום חדש"
-      };
+  const runAgentTask = async () => {
+    if (!agentTask || !result?.transcript) return;
 
-      // עדכון הסטייט ושמירה בזיכרון המקומי של הטלפון
-      const updatedHistory = [newEntry, ...history];
-      setHistory(updatedHistory);
-      await AsyncStorage.setItem('summary_history', JSON.stringify(updatedHistory));
-
-    } catch (error) {
-      alert(error.message);
+    setLoading(true);
+    setStatus('הסוכן AI מעבד את הבקשה...');
+    try {
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: result.transcript,
+          task: agentTask
+        }),
+      });
+      const data = await response.json();
+      if (data.error) throw new Error(data.error);
+      setAgentResult(data.answer);
+      setAgentTask(''); 
+    } catch (err) {
+      Alert.alert('שגיאה', 'הסוכן לא הצליח להשלים את המשימה');
     } finally {
       setLoading(false);
     }
   };
 
+  const shareText = async (text) => {
+    try {
+      await Share.share({ message: text });
+    } catch (error) {
+      console.log(error.message);
+    }
+  };
+
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" />
+    <KeyboardAvoidingView 
+      behavior={Platform.OS === "ios" ? "padding" : "height"} 
+      style={styles.container}
+    >
+      <Text style={styles.title}>Voice AI Agent</Text>
       
-      {showWelcome ? (
-        <View style={styles.welcomeContainer}>
-          <View style={styles.glowCircle}>
-            <MaterialCommunityIcons name="robot-outline" size={70} color="#a855f7" />
-          </View>
-          <Text style={styles.welcomeTitle}>VoiceSummary</Text>
-          <Text style={styles.welcomeSubtitle}>בינה מלאכותית בשירות האוזניים שלך</Text>
-          <TouchableOpacity style={styles.mainBtn} onPress={() => setShowWelcome(false)}>
-            <Text style={styles.mainBtnText}>התחלת עבודה</Text>
-            <MaterialCommunityIcons name="chevron-left" size={24} color="white" />
-          </TouchableOpacity>
-        </View>
-      ) : (
-        <>
-          <View style={styles.header}>
-            <View>
-              <Text style={styles.headerTitle}>הסיכומים שלי</Text>
-              <Text style={styles.headerSub}>{history.length} הודעות עובדו</Text>
-            </View>
-            <TouchableOpacity onPress={() => setShowWelcome(true)} style={styles.iconBtn}>
-              <MaterialCommunityIcons name="cog-outline" size={26} color="#94a3b8" />
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView contentContainerStyle={{ padding: 20 }}>
-            <TouchableOpacity 
-              style={[styles.uploadBox, loading && styles.uploadBoxDisabled]} 
-              onPress={() => !loading && DocumentPicker.getDocumentAsync({type: 'audio/*'}).then(r => !r.canceled && handleUpload(r.assets[0]))}
-              disabled={loading}
-            >
-              {loading ? (
-                <View style={{ alignItems: 'center' }}>
-                  <ActivityIndicator size="large" color="#a855f7" />
-                  <Text style={styles.loadingMsg}>{loadingMessages[loadingStep]}</Text>
-                </View>
-              ) : (
-                <>
-                  <View style={styles.plusCircle}>
-                    <MaterialCommunityIcons name="plus" size={30} color="white" />
-                  </View>
-                  <Text style={styles.uploadTitle}>העלה הודעה קולית</Text>
-                  <Text style={styles.uploadDesc}>MP3, WAV, M4A עד 25MB</Text>
-                </>
-              )}
-            </TouchableOpacity>
-
-            {history.map((item) => (
-              <View key={item.id} style={styles.card}>
-                <View style={styles.cardTop}>
-                  <View style={styles.tag}>
-                    <Text style={styles.tagText}>{item.tag}</Text>
-                  </View>
-                  <Text style={styles.cardDate}>{item.date}</Text>
-                </View>
-                          
-                <View>
-                  <Text style={styles.sectionTitle}>התמלול המלא:</Text>
-                  <Text style={styles.transcriptText}>{item.transcript || "אין תמלול זמין"}</Text>
-  
-                  <Text style={styles.sectionTitle}>הסיכום של AI:</Text>
-                  <Text style={styles.cardText}>{item.summary}</Text>
-                </View>                    
-                
-                <View style={styles.cardFooter}>
-                  <Text style={styles.fileLabel}>{item.fileName}</Text>
-                  <View style={styles.cardActions}>
-                    <TouchableOpacity onPress={() => deleteItem(item.id)} style={styles.actionIcon}>
-                      <MaterialCommunityIcons name="delete-outline" size={22} color="#ef4444" />
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={() => Share.share({message: item.summary})} style={styles.actionIcon}>
-                      <MaterialCommunityIcons name="share-variant" size={22} color="#a855f7" />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              </View>
-            ))}
-          </ScrollView>
-        </>
+      {!result && !loading && (
+        <TouchableOpacity style={styles.uploadCard} onPress={pickDocument}>
+          <MaterialCommunityIcons name="microphone-outline" size={80} color="#6C63FF" />
+          <Text style={styles.uploadText}>העלה הקלטה להתחלה</Text>
+        </TouchableOpacity>
       )}
-    </SafeAreaView>
+
+      {loading && (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#6C63FF" />
+          <Text style={styles.statusText}>{status}</Text>
+        </View>
+      )}
+
+      {result && !loading && (
+        <ScrollView style={styles.resultContainer} showsVerticalScrollIndicator={false}>
+          <View style={styles.topActions}>
+            <TouchableOpacity style={styles.refreshBtn} onPress={() => {setResult(null); setAgentResult('');}}>
+              <MaterialCommunityIcons name="refresh" size={20} color="#FFF" />
+              <Text style={styles.btnText}>חדש</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.shareBtn} onPress={() => shareText(`*סיכום:*\n${result.summary}\n\n*תמלול:*\n${result.transcript}`)}>
+              <MaterialCommunityIcons name="share-variant" size={20} color="#FFF" />
+              <Text style={styles.btnText}>שתף הכל</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>סיכום חכם</Text>
+            <Text style={styles.text}>{result.summary}</Text>
+          </View>
+
+          <View style={[styles.card, {borderColor: '#6C63FF', borderWidth: 1}]}>
+            <Text style={[styles.cardTitle, {color: '#6C63FF'}]}>AI Agent - פקודות</Text>
+            <View style={styles.agentInputContainer}>
+              <TextInput 
+                style={styles.input}
+                placeholder="למשל: תרגם לאנגלית..."
+                value={agentTask}
+                onChangeText={setAgentTask}
+              />
+              <TouchableOpacity style={styles.sendBtn} onPress={runAgentTask}>
+                <MaterialCommunityIcons name="send" size={20} color="#FFF" />
+              </TouchableOpacity>
+            </View>
+            
+            {agentResult ? (
+              <View style={styles.agentResponse}>
+                <Text style={styles.agentResponseText}>{agentResult}</Text>
+                <TouchableOpacity onPress={() => shareText(agentResult)} style={styles.smallShare}>
+                   <MaterialCommunityIcons name="share-variant" size={16} color="#6C63FF" />
+                   <Text style={{color: '#6C63FF', fontSize: 13, marginRight: 5}}>שתף תשובה</Text>
+                </TouchableOpacity>
+              </View>
+            ) : null}
+          </View>
+
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>תמלול מלא</Text>
+            <Text style={styles.transcriptText}>{result.transcript}</Text>
+          </View>
+        </ScrollView>
+      )}
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#020617' },
-  welcomeContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 30 },
-  glowCircle: { width: 140, height: 140, borderRadius: 70, backgroundColor: 'rgba(168, 85, 247, 0.1)', justifyContent: 'center', alignItems: 'center', marginBottom: 20, borderWidth: 1, borderColor: '#a855f7' },
-  welcomeTitle: { color: 'white', fontSize: 36, fontWeight: '900', letterSpacing: 1 },
-  welcomeSubtitle: { color: '#94a3b8', fontSize: 16, marginTop: 10, marginBottom: 40 },
-  mainBtn: { backgroundColor: '#a855f7', flexDirection: 'row-reverse', paddingVertical: 18, paddingHorizontal: 35, borderRadius: 20, alignItems: 'center', gap: 10 },
-  mainBtnText: { color: 'white', fontSize: 18, fontWeight: 'bold' },
-  header: { flexDirection: 'row-reverse', justifyContent: 'space-between', padding: 25, alignItems: 'center' },
-  headerTitle: { color: 'white', fontSize: 28, fontWeight: 'bold' },
-  headerSub: { color: '#64748b', fontSize: 14, textAlign: 'right' },
-  uploadBox: { backgroundColor: '#0f172a', borderRadius: 24, padding: 30, alignItems: 'center', borderWidth: 1, borderColor: '#1e293b', marginBottom: 30 },
-  plusCircle: { width: 50, height: 50, borderRadius: 25, backgroundColor: '#a855f7', justifyContent: 'center', alignItems: 'center', marginBottom: 15 },
-  uploadTitle: { color: 'white', fontSize: 18, fontWeight: '700' },
-  uploadDesc: { color: '#475569', fontSize: 12, marginTop: 5 },
-  loadingMsg: { color: '#a855f7', marginTop: 15, fontWeight: '600' },
-  card: { backgroundColor: '#0f172a', borderRadius: 20, padding: 20, marginBottom: 15, borderWidth: 1, borderColor: '#1e293b' },
-  cardTop: { flexDirection: 'row-reverse', justifyContent: 'space-between', marginBottom: 12 },
-  tag: { backgroundColor: 'rgba(168, 85, 247, 0.2)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
-  tagText: { color: '#c084fc', fontSize: 11, fontWeight: 'bold' },
-  cardDate: { color: '#475569', fontSize: 12 },
-  sectionTitle: { fontWeight: 'bold', color: '#a855f7', marginBottom: 5, textAlign: 'right' },
-  transcriptText: { fontSize: 14, color: '#94a3b8', marginBottom: 15, textAlign: 'right', lineHeight: 20 },
-  cardText: { color: '#cbd5e1', fontSize: 16, lineHeight: 24, textAlign: 'right' },
-  cardFooter: { marginTop: 15, paddingTop: 15, borderTopWidth: 1, borderTopColor: '#1e293b', flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center' },
-  fileLabel: { color: '#475569', fontSize: 11 },
-  cardActions: { flexDirection: 'row', gap: 15 },
-  actionIcon: { padding: 5 }
+  container: { flex: 1, backgroundColor: '#F0F2F5', paddingTop: 60, paddingHorizontal: 20 },
+  title: { fontSize: 26, fontWeight: 'bold', color: '#1A1A2E', textAlign: 'center', marginBottom: 20 },
+  uploadCard: { backgroundColor: '#FFF', borderRadius: 25, padding: 50, alignItems: 'center', elevation: 4 },
+  uploadText: { marginTop: 15, fontSize: 18, color: '#6C63FF', fontWeight: '600' },
+  loadingContainer: { marginTop: 40, alignItems: 'center' },
+  statusText: { marginTop: 15, fontSize: 16, color: '#555' },
+  resultContainer: { flex: 1 },
+  topActions: { flexDirection: 'row-reverse', justifyContent: 'space-between', marginBottom: 15 },
+  refreshBtn: { flexDirection: 'row-reverse', backgroundColor: '#FF4D4D', padding: 10, borderRadius: 10, alignItems: 'center', width: '45%', justifyContent: 'center' },
+  shareBtn: { flexDirection: 'row-reverse', backgroundColor: '#6C63FF', padding: 10, borderRadius: 10, alignItems: 'center', width: '45%', justifyContent: 'center' },
+  btnText: { color: '#FFF', marginRight: 8, fontWeight: '600' },
+  card: { backgroundColor: '#FFF', borderRadius: 15, padding: 15, marginBottom: 15, elevation: 2 },
+  cardTitle: { fontSize: 16, fontWeight: 'bold', color: '#333', marginBottom: 8, textAlign: 'right' },
+  text: { fontSize: 15, color: '#444', textAlign: 'right', lineHeight: 22 },
+  transcriptText: { fontSize: 13, color: '#777', textAlign: 'right' },
+  agentInputContainer: { flexDirection: 'row-reverse', alignItems: 'center', marginTop: 10 },
+  input: { flex: 1, backgroundColor: '#F8F9FA', borderRadius: 10, padding: 12, textAlign: 'right', marginLeft: 10 },
+  sendBtn: { backgroundColor: '#6C63FF', padding: 12, borderRadius: 10 },
+  agentResponse: { marginTop: 15, padding: 10, backgroundColor: '#F0EFFF', borderRadius: 10 },
+  agentResponseText: { fontSize: 15, color: '#333', textAlign: 'right' },
+  smallShare: { flexDirection: 'row-reverse', alignItems: 'center', marginTop: 10 }
 });

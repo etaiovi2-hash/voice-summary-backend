@@ -9,7 +9,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width } = Dimensions.get('window');
 const API_URL = "https://voice-summary-app.vercel.app/api/transcribe";
-const USE_MOCK = false;
 
 export default function App() {
   const [showWelcome, setShowWelcome] = useState(true);
@@ -38,12 +37,6 @@ export default function App() {
     if (saved) setHistory(JSON.parse(saved));
   };
 
-  const saveToHistory = async (newEntry) => {
-    const updated = [newEntry, ...history];
-    setHistory(updated);
-    await AsyncStorage.setItem('summary_history', JSON.stringify(updated));
-  };
-
   const deleteItem = (id) => {
     Alert.alert("מחיקה", "להסיר את הסיכום מההיסטוריה?", [
       { text: "ביטול", style: "cancel" },
@@ -55,46 +48,51 @@ export default function App() {
     ]);
   };
 
-const handleUpload = async (file) => {
-  setLoading(true);
-  try {
-    const formData = new FormData();
-    // בדיקה אם זה opus של וואטסאפ
-    const isOpus = file.name.toLowerCase().endsWith('.opus');
-    
-    formData.append('audio', {
-      uri: file.uri,
-      // תכריח אותו להיות mp3 או m4a, זה הכי בטוח עבור Whisper
-      type: 'audio/mpeg', 
-      name: 'recording.mp3', 
-    });
+  const handleUpload = async (file) => {
+    setLoading(true);
+    try {
+      const formData = new FormData();
+      
+      formData.append('audio', {
+        uri: file.uri,
+        type: 'audio/mpeg', 
+        name: 'recording.mp3', 
+      });
 
-    const response = await fetch(API_URL, {
-      method: 'POST',
-      body: formData,
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'multipart/form-data',
-      },
-    });
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        body: formData,
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'multipart/form-data',
+        },
+      });
 
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || 'שגיאת שרת');
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'שגיאת שרת');
 
-    // כאן תוסיף את הלוגיקה שלך להצגת הסיכום (setHistory וכו')
-    setHistory(prev => [{
-      id: Date.now().toString(),
-      summary: data.summary,
-      fileName: file.name,
-      date: new Date().toLocaleDateString()
-    }, ...prev]);
+      // יצירת האובייקט החדש עם התמלול והסיכום
+      const newEntry = {
+        id: Date.now().toString(),
+        summary: data.summary,
+        transcript: data.transcript, 
+        fileName: file.name,
+        date: new Date().toLocaleDateString(),
+        tag: "סיכום חדש"
+      };
 
-  } catch (error) {
-    alert(error.message);
-  } finally {
-    setLoading(false);
-  }
-};
+      // עדכון הסטייט ושמירה בזיכרון המקומי של הטלפון
+      const updatedHistory = [newEntry, ...history];
+      setHistory(updatedHistory);
+      await AsyncStorage.setItem('summary_history', JSON.stringify(updatedHistory));
+
+    } catch (error) {
+      alert(error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" />
@@ -155,12 +153,13 @@ const handleUpload = async (file) => {
                 </View>
                           
                 <View>
-                  <Text style={[styles.cardText, { fontWeight: 'bold', color: '#a855f7', marginBottom: 5 }]}>התמלול המלא:</Text>
-                  <Text style={[styles.cardText, { fontSize: 14, color: '#94a3b8', marginBottom: 15 }]}>{item.transcript || "אין תמלול זמין"}</Text>
+                  <Text style={styles.sectionTitle}>התמלול המלא:</Text>
+                  <Text style={styles.transcriptText}>{item.transcript || "אין תמלול זמין"}</Text>
   
-                  <Text style={[styles.cardText, { fontWeight: 'bold', color: '#a855f7', marginBottom: 5 }]}>הסיכום של AI:</Text>
+                  <Text style={styles.sectionTitle}>הסיכום של AI:</Text>
                   <Text style={styles.cardText}>{item.summary}</Text>
                 </View>                    
+                
                 <View style={styles.cardFooter}>
                   <Text style={styles.fileLabel}>{item.fileName}</Text>
                   <View style={styles.cardActions}>
@@ -202,6 +201,8 @@ const styles = StyleSheet.create({
   tag: { backgroundColor: 'rgba(168, 85, 247, 0.2)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
   tagText: { color: '#c084fc', fontSize: 11, fontWeight: 'bold' },
   cardDate: { color: '#475569', fontSize: 12 },
+  sectionTitle: { fontWeight: 'bold', color: '#a855f7', marginBottom: 5, textAlign: 'right' },
+  transcriptText: { fontSize: 14, color: '#94a3b8', marginBottom: 15, textAlign: 'right', lineHeight: 20 },
   cardText: { color: '#cbd5e1', fontSize: 16, lineHeight: 24, textAlign: 'right' },
   cardFooter: { marginTop: 15, paddingTop: 15, borderTopWidth: 1, borderTopColor: '#1e293b', flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center' },
   fileLabel: { color: '#475569', fontSize: 11 },

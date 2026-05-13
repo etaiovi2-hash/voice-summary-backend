@@ -1,0 +1,24 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "api/transcribe.js",
+      "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/transcribe",
+      "dest": "/api/transcribe.js"
+    }
+  ],
+  "env": {
+    "OPENAI_API_KEY": "@openai_api_key"
+  },
+  "functions": {
+    "api/transcribe.js": {
+      "maxDuration": 60,
+      "memory": 1024
+    }
+  }
+}

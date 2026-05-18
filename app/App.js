@@ -1,9 +1,8 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   StyleSheet, Text, View, TouchableOpacity, ScrollView,
-  ActivityIndicator, Alert, TextInput, Share,
-  KeyboardAvoidingView, Platform, Keyboard, Animated,
-  StatusBar, Dimensions, FlatList, Modal,
+  Alert, TextInput, Share, KeyboardAvoidingView, Platform,
+  Keyboard, Animated, StatusBar, Dimensions, Modal, Easing,
 } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -14,783 +13,484 @@ import * as FileSystem from 'expo-file-system';
 const { width, height } = Dimensions.get('window');
 const API_URL = 'https://voice-summary-backend.vercel.app/api/transcribe';
 
-// ─── Translations ─────────────────────────────────────────────────────────────
+const C = {
+  bg: '#080a0f', bgPanel: '#0e1018', bgCard: '#111420',
+  bgCardBorder: '#1e2235', accent: '#ff2d4e', accentGlow: 'rgba(255,45,78,0.28)',
+  accentSoft: 'rgba(255,45,78,0.12)', gold: '#f5c842', goldSoft: 'rgba(245,200,66,0.12)',
+  cyan: '#00e5ff', cyanSoft: 'rgba(0,229,255,0.10)', textPrimary: '#e8eaf6',
+  textSecondary: '#7a7f99', textMuted: '#3a3f55', success: '#39ff14',
+  divider: '#1a1d2e',
+};
+
 const T = {
   he: {
-    appName: 'סוכן קול AI',
-    tagline: 'תמלול וסיכום חכם',
-    uploadTitle: 'העלה קובץ שמע',
-    uploadSub: 'לחץ לבחירת קובץ אודיו',
+    appName: 'VOICE.AI', sub: 'מנוע תמלול וסיכום',
+    uploadTitle: 'שחרר את הקול', uploadSub: 'לחץ לטעינת קובץ שמע',
     shareHint: 'או שתף ישירות מוואטסאפ',
-    processing: 'מעבד את הקובץ...',
-    transcribing: 'מתמלל...',
-    summarizing: 'מסכם...',
-    transcript: 'תמלול',
-    summary: 'סיכום',
-    askPlaceholder: 'שאל שאלה על התמלול...',
-    askBtn: 'שאל',
-    history: 'היסטוריה',
-    noHistory: 'אין היסטוריה עדיין',
-    share: 'שתף',
-    copy: 'העתק',
-    close: 'סגור',
-    errorTitle: 'שגיאה',
-    incomingAudio: 'קובץ שמע נכנס',
-    incomingMsg: 'מעבד קובץ שמע שהתקבל...',
-    copied: 'הועתק!',
-    agentThinking: 'הסוכן חושב...',
-    clearHistory: 'נקה היסטוריה',
-    noTranscript: 'אין תמלול זמין לשאילה',
+    transcribing: 'מתמלל...', summarizing: 'מסכם...',
+    summary: '// סיכום', transcript: '// תמלול',
+    askPlaceholder: 'שאל את הסוכן...', history: 'לוג', noHistory: 'אין רשומות',
+    share: 'שתף', copy: 'העתק', close: 'סגור', errorTitle: 'שגיאה',
+    copied: 'הועתק ✓', agentThinking: 'מחשב תגובה', clearHistory: 'מחק לוג',
+    noTranscript: 'אין תמלול זמין', tabMain: 'סורק', tabLog: 'לוג',
+    iosNote: 'iOS: שמור קובץ ופתח מכאן',
   },
   en: {
-    appName: 'Voice AI Agent',
-    tagline: 'Smart Transcription & Summary',
-    uploadTitle: 'Upload Audio File',
-    uploadSub: 'Tap to select an audio file',
+    appName: 'VOICE.AI', sub: 'Transcription & Summary Engine',
+    uploadTitle: 'Release The Voice', uploadSub: 'Tap to load audio file',
     shareHint: 'Or share directly from WhatsApp',
-    processing: 'Processing file...',
-    transcribing: 'Transcribing...',
-    summarizing: 'Summarizing...',
-    transcript: 'Transcript',
-    summary: 'Summary',
-    askPlaceholder: 'Ask a question about the transcript...',
-    askBtn: 'Ask',
-    history: 'History',
-    noHistory: 'No history yet',
-    share: 'Share',
-    copy: 'Copy',
-    close: 'Close',
-    errorTitle: 'Error',
-    incomingAudio: 'Incoming Audio',
-    incomingMsg: 'Processing received audio file...',
-    copied: 'Copied!',
-    agentThinking: 'Agent is thinking...',
-    clearHistory: 'Clear History',
-    noTranscript: 'No transcript available to query',
+    transcribing: 'Transcribing...', summarizing: 'Summarizing...',
+    summary: '// Summary', transcript: '// Transcript',
+    askPlaceholder: 'Query the agent...', history: 'Log', noHistory: 'No records',
+    share: 'Share', copy: 'Copy', close: 'Close', errorTitle: 'Error',
+    copied: 'Copied ✓', agentThinking: 'Computing response', clearHistory: 'Purge Log',
+    noTranscript: 'No transcript available', tabMain: 'Scanner', tabLog: 'Log',
+    iosNote: 'iOS: Save file first, then open from here',
   },
 };
 
-// ─── Palette ──────────────────────────────────────────────────────────────────
-const C = {
-  bg: '#0d0f1a',
-  bgCard: 'rgba(255,255,255,0.06)',
-  bgCardBorder: 'rgba(255,255,255,0.12)',
-  bgCardStrong: 'rgba(255,255,255,0.10)',
-  accent: '#818cf8',
-  accentSoft: 'rgba(129,140,248,0.18)',
-  accentGlow: 'rgba(129,140,248,0.35)',
-  teal: '#2dd4bf',
-  tealSoft: 'rgba(45,212,191,0.15)',
-  pink: '#f472b6',
-  textPrimary: '#f1f5f9',
-  textSecondary: '#94a3b8',
-  textMuted: '#475569',
-  success: '#34d399',
-  error: '#f87171',
-  divider: 'rgba(255,255,255,0.07)',
-};
+const MONO = Platform.OS === 'ios' ? 'Courier New' : 'monospace';
 
-// ─── Skeleton Loader ───────────────────────────────────────────────────────────
-const SkeletonLine = ({ width: w = '100%', height: h = 14, style }) => {
-  const anim = useRef(new Animated.Value(0.3)).current;
+const GlitchText = ({ text, style }) => {
+  const shift = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(anim, { toValue: 1, duration: 800, useNativeDriver: true }),
-        Animated.timing(anim, { toValue: 0.3, duration: 800, useNativeDriver: true }),
-      ])
-    ).start();
+    Animated.loop(Animated.sequence([
+      Animated.delay(3000),
+      Animated.timing(shift, { toValue: 1, duration: 80, useNativeDriver: true }),
+      Animated.timing(shift, { toValue: 0, duration: 80, useNativeDriver: true }),
+      Animated.timing(shift, { toValue: 1, duration: 60, useNativeDriver: true }),
+      Animated.timing(shift, { toValue: 0, duration: 120, useNativeDriver: true }),
+    ])).start();
   }, []);
   return (
-    <Animated.View
-      style={[{
-        width: w, height: h, borderRadius: 6,
-        backgroundColor: 'rgba(129,140,248,0.2)',
-        opacity: anim, marginBottom: 8,
-      }, style]}
-    />
+    <View>
+      <Animated.Text style={[style, { transform: [{ translateX: shift.interpolate({ inputRange: [0,1], outputRange: [0,3] }) }], opacity: 0.3, color: C.cyan, position: 'absolute' }]}>{text}</Animated.Text>
+      <Animated.Text style={[style, { transform: [{ translateX: shift.interpolate({ inputRange: [0,1], outputRange: [0,-2] }) }], opacity: 0.3, color: C.accent, position: 'absolute' }]}>{text}</Animated.Text>
+      <Text style={style}>{text}</Text>
+    </View>
   );
 };
 
-const SkeletonCard = () => (
-  <View style={styles.card}>
-    <SkeletonLine width="40%" height={12} />
-    <SkeletonLine width="100%" />
-    <SkeletonLine width="90%" />
-    <SkeletonLine width="75%" />
-    <SkeletonLine width="85%" />
-    <SkeletonLine width="60%" />
-  </View>
-);
-
-// ─── Thinking Dots ─────────────────────────────────────────────────────────────
-const ThinkingDots = ({ label }) => {
-  const dots = [useRef(new Animated.Value(0)).current, useRef(new Animated.Value(0)).current, useRef(new Animated.Value(0)).current];
+const WaveForm = ({ active }) => {
+  const b0=useRef(new Animated.Value(0.15)).current,b1=useRef(new Animated.Value(0.15)).current,b2=useRef(new Animated.Value(0.15)).current,b3=useRef(new Animated.Value(0.15)).current,b4=useRef(new Animated.Value(0.15)).current,b5=useRef(new Animated.Value(0.15)).current,b6=useRef(new Animated.Value(0.15)).current,b7=useRef(new Animated.Value(0.15)).current,b8=useRef(new Animated.Value(0.15)).current,b9=useRef(new Animated.Value(0.15)).current,b10=useRef(new Animated.Value(0.15)).current,b11=useRef(new Animated.Value(0.15)).current,b12=useRef(new Animated.Value(0.15)).current,b13=useRef(new Animated.Value(0.15)).current,b14=useRef(new Animated.Value(0.15)).current,b15=useRef(new Animated.Value(0.15)).current,b16=useRef(new Animated.Value(0.15)).current,b17=useRef(new Animated.Value(0.15)).current,b18=useRef(new Animated.Value(0.15)).current,b19=useRef(new Animated.Value(0.15)).current;
+  const bars = [b0,b1,b2,b3,b4,b5,b6,b7,b8,b9,b10,b11,b12,b13,b14,b15,b16,b17,b18,b19];
   useEffect(() => {
-    const anims = dots.map((d, i) =>
-      Animated.loop(
-        Animated.sequence([
-          Animated.delay(i * 150),
-          Animated.timing(d, { toValue: 1, duration: 300, useNativeDriver: true }),
-          Animated.timing(d, { toValue: 0, duration: 300, useNativeDriver: true }),
-          Animated.delay(600 - i * 150),
-        ])
-      )
-    );
+    if (!active) { bars.forEach(b => b.setValue(0.15)); return; }
+    const anims = bars.map((b, i) => Animated.loop(Animated.sequence([
+      Animated.delay(i * 60),
+      Animated.timing(b, { toValue: Math.random() * 0.7 + 0.3, duration: 200 + Math.random() * 300, useNativeDriver: false }),
+      Animated.timing(b, { toValue: 0.15, duration: 200 + Math.random() * 300, useNativeDriver: false }),
+    ])));
+    anims.forEach(a => a.start());
+    return () => anims.forEach(a => a.stop());
+  }, [active]);
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, height: 50 }}>
+      {bars.map((b, i) => (
+        <Animated.View key={i} style={{
+          width: 3, borderRadius: 2,
+          height: b.interpolate({ inputRange: [0,1], outputRange: [4,46] }),
+          backgroundColor: i % 3 === 0 ? C.accent : i % 3 === 1 ? C.cyan : C.gold,
+          opacity: active ? 1 : 0.2,
+        }} />
+      ))}
+    </View>
+  );
+};
+const SkeletonLine = ({ w = '100%', h = 10 }) => {
+  const anim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.loop(Animated.sequence([
+      Animated.timing(anim, { toValue: 1, duration: 700, useNativeDriver: true }),
+      Animated.timing(anim, { toValue: 0, duration: 700, useNativeDriver: true }),
+    ])).start();
+  }, []);
+  return <Animated.View style={{ width: w, height: h, borderRadius: 2, backgroundColor: '#ff2d4e', opacity: anim.interpolate({ inputRange: [0,1], outputRange: [0.08, 0.25] }), marginBottom: 7 }} />;
+};
+
+const ThinkingDots = ({ label }) => {
+ const d0=useRef(new Animated.Value(0)).current, d1=useRef(new Animated.Value(0)).current, d2=useRef(new Animated.Value(0)).current;
+ const dots = [d0, d1, d2];
+  useEffect(() => {
+    const anims = dots.map((d, i) => Animated.loop(Animated.sequence([
+      Animated.delay(i * 180),
+      Animated.timing(d, { toValue: 1, duration: 300, useNativeDriver: true }),
+      Animated.timing(d, { toValue: 0, duration: 300, useNativeDriver: true }),
+      Animated.delay(540 - i * 180),
+    ])));
     anims.forEach(a => a.start());
     return () => anims.forEach(a => a.stop());
   }, []);
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-      <Text style={{ color: C.textSecondary, fontSize: 13 }}>{label}</Text>
-      <View style={{ flexDirection: 'row', gap: 4, marginLeft: 4 }}>
-        {dots.map((d, i) => (
-          <Animated.View key={i} style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: C.accent, opacity: d }} />
-        ))}
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+      <Text style={{ color: C.gold, fontFamily: MONO, fontSize: 12 }}>{label}</Text>
+      <View style={{ flexDirection: 'row', gap: 5 }}>
+        {dots.map((d, i) => <Animated.View key={i} style={{ width: 5, height: 5, borderRadius: 1, backgroundColor: C.accent, opacity: d }} />)}
       </View>
     </View>
   );
 };
 
-// ─── Pulse Ring (upload idle animation) ───────────────────────────────────────
-const PulseRing = () => {
-  const scale = useRef(new Animated.Value(1)).current;
-  const opacity = useRef(new Animated.Value(0.6)).current;
-  useEffect(() => {
-    Animated.loop(
-      Animated.parallel([
-        Animated.sequence([
-          Animated.timing(scale, { toValue: 1.3, duration: 1200, useNativeDriver: true }),
-          Animated.timing(scale, { toValue: 1, duration: 1200, useNativeDriver: true }),
-        ]),
-        Animated.sequence([
-          Animated.timing(opacity, { toValue: 0, duration: 1200, useNativeDriver: true }),
-          Animated.timing(opacity, { toValue: 0.6, duration: 1200, useNativeDriver: true }),
-        ]),
-      ])
-    ).start();
-  }, []);
-  return (
-    <Animated.View style={{
-      position: 'absolute', width: 90, height: 90, borderRadius: 45,
-      borderWidth: 2, borderColor: C.accent,
-      transform: [{ scale }], opacity,
-    }} />
-  );
-};
+const Corners = ({ color = C.accent, size = 12, t = 1.5 }) => (
+  <>
+    <View style={{ position:'absolute', top:0, left:0, width:size, height:size, borderTopWidth:t, borderLeftWidth:t, borderColor:color }} />
+    <View style={{ position:'absolute', top:0, right:0, width:size, height:size, borderTopWidth:t, borderRightWidth:t, borderColor:color }} />
+    <View style={{ position:'absolute', bottom:0, left:0, width:size, height:size, borderBottomWidth:t, borderLeftWidth:t, borderColor:color }} />
+    <View style={{ position:'absolute', bottom:0, right:0, width:size, height:size, borderBottomWidth:t, borderRightWidth:t, borderColor:color }} />
+  </>
+);
 
-// ─── Main App ──────────────────────────────────────────────────────────────────
 export default function App() {
   const [lang, setLang] = useState('he');
   const t = T[lang];
   const isRTL = lang === 'he';
 
-  const [loadingStep, setLoadingStep] = useState(null); // null | 'transcribing' | 'summarizing'
+  const [loadingStep, setLoadingStep] = useState(null);
   const [agentLoading, setAgentLoading] = useState(false);
   const [transcript, setTranscript] = useState('');
   const [summary, setSummary] = useState('');
   const [agentAnswer, setAgentAnswer] = useState('');
   const [agentTask, setAgentTask] = useState('');
   const [history, setHistory] = useState([]);
-  const [activeTab, setActiveTab] = useState('main'); // 'main' | 'history'
+  const [activeTab, setActiveTab] = useState('main');
   const [historyModal, setHistoryModal] = useState(null);
   const [toast, setToast] = useState('');
+
   const toastAnim = useRef(new Animated.Value(0)).current;
-  const headerAnim = useRef(new Animated.Value(0)).current;
-  const cardAnim = useRef(new Animated.Value(0)).current;
+  const bootAnim  = useRef(new Animated.Value(0)).current;
+  const redlineW  = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.stagger(150, [
-      Animated.spring(headerAnim, { toValue: 1, useNativeDriver: true }),
-      Animated.spring(cardAnim, { toValue: 1, useNativeDriver: true }),
+    Animated.sequence([
+      Animated.timing(redlineW, { toValue: 1, duration: 600, easing: Easing.out(Easing.expo), useNativeDriver: false }),
+      Animated.timing(bootAnim,  { toValue: 1, duration: 400, useNativeDriver: true }),
     ]).start();
-  }, []);
-
-  useEffect(() => {
     loadHistory();
-    const sub = Linking.addEventListener('url', (e) => handleIncomingFile(e.url));
-    Linking.getInitialURL().then(url => { if (url) handleIncomingFile(url); });
+    const sub = Linking.addEventListener('url', e => handleIncomingURL(e.url));
+    Linking.getInitialURL().then(url => { if (url) handleIncomingURL(url); });
     return () => sub.remove();
   }, []);
 
-  const showToast = (msg) => {
+  const showToast = msg => {
     setToast(msg);
     Animated.sequence([
-      Animated.timing(toastAnim, { toValue: 1, duration: 250, useNativeDriver: true }),
+      Animated.timing(toastAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
       Animated.delay(1800),
-      Animated.timing(toastAnim, { toValue: 0, duration: 250, useNativeDriver: true }),
+      Animated.timing(toastAnim, { toValue: 0, duration: 200, useNativeDriver: true }),
     ]).start(() => setToast(''));
   };
 
   const loadHistory = async () => {
-    try {
-      const saved = await AsyncStorage.getItem('voiceHistory');
-      if (saved) setHistory(JSON.parse(saved));
-    } catch (_) {}
+    try { const s = await AsyncStorage.getItem('vaiHistory'); if (s) setHistory(JSON.parse(s)); } catch (_) {}
   };
 
-  const saveHistory = async (newHist) => {
-    setHistory(newHist);
-    await AsyncStorage.setItem('voiceHistory', JSON.stringify(newHist));
+  const saveHistory = async h => {
+    setHistory(h);
+    await AsyncStorage.setItem('vaiHistory', JSON.stringify(h));
   };
 
-  const clearHistory = async () => {
-    Alert.alert(t.clearHistory, isRTL ? 'האם למחוק את כל ההיסטוריה?' : 'Delete all history?', [
+  const clearHistory = () => {
+    Alert.alert(t.clearHistory, isRTL ? 'למחוק הכל?' : 'Delete all?', [
       { text: t.close, style: 'cancel' },
-      { text: isRTL ? 'מחק' : 'Delete', style: 'destructive', onPress: async () => { await saveHistory([]); } },
+      { text: isRTL ? 'מחק' : 'Delete', style: 'destructive', onPress: () => saveHistory([]) },
     ]);
   };
 
-  const handleIncomingFile = async (url) => {
+  const handleIncomingURL = async url => {
     if (!url) return;
-    Alert.alert(t.incomingAudio, t.incomingMsg);
     try {
-      let fileUri = url;
-      // Handle content:// URIs on Android
-      if (Platform.OS === 'android' && url.startsWith('content://')) {
-        const dest = FileSystem.cacheDirectory + 'shared_audio_' + Date.now() + '.m4a';
-        await FileSystem.copyAsync({ from: url, to: dest });
-        fileUri = dest;
+      let fileUri = url, fileName = 'shared_audio', mimeType = 'audio/mpeg';
+      if (Platform.OS === 'android') {
+        if (url.startsWith('content://')) {
+          const ext = url.includes('.ogg') ? 'ogg' : url.includes('.m4a') ? 'm4a' : url.includes('.mp3') ? 'mp3' : 'mp4';
+          const dest = `${FileSystem.cacheDirectory}shared_${Date.now()}.${ext}`;
+          await FileSystem.copyAsync({ from: url, to: dest });
+          fileUri = dest; fileName = `audio.${ext}`;
+          mimeType = ext === 'ogg' ? 'audio/ogg' : ext === 'm4a' ? 'audio/m4a' : 'audio/mpeg';
+        } else if (url.startsWith('file://')) {
+          fileUri = url; fileName = url.split('/').pop() || 'audio.mp3';
+        }
+      } else {
+        const decoded = decodeURIComponent(url.replace(/^.*?:\/\//, ''));
+        fileUri = decoded.startsWith('/') ? `file://${decoded}` : url;
+        fileName = fileUri.split('/').pop() || 'audio.m4a';
+        const ext = fileName.split('.').pop()?.toLowerCase() || 'm4a';
+        const mm = { m4a:'audio/m4a', mp3:'audio/mpeg', ogg:'audio/ogg', mp4:'audio/mp4', aac:'audio/aac', wav:'audio/wav' };
+        mimeType = mm[ext] || 'audio/mpeg';
       }
-      const fileName = fileUri.split('/').pop() || 'shared_audio.m4a';
-      processFile({ uri: fileUri, name: fileName, mimeType: 'audio/m4a' });
-    } catch (e) {
-      Alert.alert(t.errorTitle, e.message);
-    }
+      processFile({ uri: fileUri, name: fileName, mimeType });
+    } catch (e) { Alert.alert(t.errorTitle, e.message); }
   };
 
   const handleUpload = async () => {
     const result = await DocumentPicker.getDocumentAsync({ type: 'audio/*', copyToCacheDirectory: true });
-    if (!result.canceled && result.assets?.length > 0) {
-      processFile(result.assets[0]);
-    }
+    if (!result.canceled && result.assets?.length > 0) processFile(result.assets[0]);
   };
 
-  const processFile = async (file) => {
-    setTranscript('');
-    setSummary('');
-    setAgentAnswer('');
-    setLoadingStep('transcribing');
+  const processFile = async file => {
+    setTranscript(''); setSummary(''); setAgentAnswer('');
+    setActiveTab('main'); setLoadingStep('transcribing');
     const formData = new FormData();
     formData.append('audio', { uri: file.uri, name: file.name || 'audio.mp3', type: file.mimeType || 'audio/mpeg' });
     try {
-      setLoadingStep('transcribing');
       const res = await fetch(API_URL, { method: 'POST', body: formData });
       setLoadingStep('summarizing');
       const data = await res.json();
       if (res.ok) {
-        setTranscript(data.transcript || '');
-        setSummary(data.summary || '');
-        const newHist = [
-          { id: Date.now(), summary: data.summary, transcript: data.transcript, date: new Date().toLocaleDateString() },
-          ...history,
-        ].slice(0, 50);
+        setTranscript(data.transcript || ''); setSummary(data.summary || '');
+        const newHist = [{ id: Date.now(), summary: data.summary, transcript: data.transcript, date: new Date().toLocaleDateString() }, ...history].slice(0, 50);
         await saveHistory(newHist);
-      } else {
-        Alert.alert(t.errorTitle, data.error || 'Unknown error');
-      }
-    } catch (e) {
-      Alert.alert(t.errorTitle, e.message);
-    } finally {
-      setLoadingStep(null);
-    }
+      } else { Alert.alert(t.errorTitle, data.error || 'Server error'); }
+    } catch (e) { Alert.alert(t.errorTitle, e.message); }
+    finally { setLoadingStep(null); }
   };
 
   const askAgent = async () => {
     if (!agentTask.trim()) return;
     if (!transcript) { Alert.alert(t.errorTitle, t.noTranscript); return; }
-    Keyboard.dismiss();
-    setAgentLoading(true);
-    setAgentAnswer('');
+    Keyboard.dismiss(); setAgentLoading(true); setAgentAnswer('');
     try {
-      const res = await fetch(API_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ transcript, question: agentTask }),
-      });
+      const res = await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ transcript, question: agentTask }) });
       const data = await res.json();
       setAgentAnswer(data.answer || data.summary || '');
-    } catch (e) {
-      Alert.alert(t.errorTitle, e.message);
-    } finally {
-      setAgentLoading(false);
-    }
+    } catch (e) { Alert.alert(t.errorTitle, e.message); }
+    finally { setAgentLoading(false); }
   };
 
-  const copyText = (text) => {
-    // Clipboard from RN core
+  const copyText = text => {
     const { Clipboard } = require('react-native');
     Clipboard.setString(text);
     showToast(t.copied);
   };
 
-  const shareText = async (text) => {
-    await Share.share({ message: text });
-  };
-
-  // ── Render helpers ─────────────────────────────────────────────────────────
-  const renderUploadZone = () => (
-    <TouchableOpacity onPress={handleUpload} activeOpacity={0.85}>
-      <Animated.View style={[styles.uploadZone, {
-        opacity: headerAnim,
-        transform: [{ translateY: headerAnim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }],
-      }]}>
-        <View style={styles.uploadIconWrap}>
-          <PulseRing />
-          <View style={styles.uploadIconInner}>
-            <MaterialCommunityIcons name="waveform" size={32} color={C.accent} />
-          </View>
-        </View>
-        <Text style={styles.uploadTitle}>{t.uploadTitle}</Text>
-        <Text style={styles.uploadSub}>{t.uploadSub}</Text>
-        <View style={styles.shareHintRow}>
-          <MaterialCommunityIcons name="whatsapp" size={14} color={C.teal} />
-          <Text style={styles.shareHint}>{t.shareHint}</Text>
-        </View>
-      </Animated.View>
-    </TouchableOpacity>
-  );
-
-  const renderLoadingCards = () => (
-    <View style={{ gap: 14 }}>
-      <View style={[styles.card, { paddingBottom: 18 }]}>
-        <ThinkingDots label={loadingStep === 'transcribing' ? t.transcribing : t.summarizing} />
-        <View style={{ height: 14 }} />
-        <SkeletonLine width="100%" />
-        <SkeletonLine width="88%" />
-        <SkeletonLine width="72%" />
-        <SkeletonLine width="95%" />
-        <SkeletonLine width="65%" />
-      </View>
-      <SkeletonCard />
-    </View>
-  );
-
-  const renderResultCards = () => (
-    <Animated.View style={{
-      gap: 14,
-      opacity: cardAnim,
-      transform: [{ translateY: cardAnim.interpolate({ inputRange: [0, 1], outputRange: [30, 0] }) }],
-    }}>
-      {/* Summary */}
-      {summary ? (
-        <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <View style={styles.cardTitleRow}>
-              <View style={[styles.dot, { backgroundColor: C.teal }]} />
-              <Text style={styles.cardTitle}>{t.summary}</Text>
-            </View>
-            <View style={styles.cardActions}>
-              <TouchableOpacity onPress={() => copyText(summary)} style={styles.actionBtn}>
-                <MaterialCommunityIcons name="content-copy" size={16} color={C.textSecondary} />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => shareText(summary)} style={styles.actionBtn}>
-                <MaterialCommunityIcons name="share-variant" size={16} color={C.textSecondary} />
-              </TouchableOpacity>
-            </View>
-          </View>
-          <Text style={[styles.cardText, isRTL && styles.rtlText]}>{summary}</Text>
-        </View>
-      ) : null}
-
-      {/* Transcript */}
-      {transcript ? (
-        <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <View style={styles.cardTitleRow}>
-              <View style={[styles.dot, { backgroundColor: C.accent }]} />
-              <Text style={styles.cardTitle}>{t.transcript}</Text>
-            </View>
-            <View style={styles.cardActions}>
-              <TouchableOpacity onPress={() => copyText(transcript)} style={styles.actionBtn}>
-                <MaterialCommunityIcons name="content-copy" size={16} color={C.textSecondary} />
-              </TouchableOpacity>
-            </View>
-          </View>
-          <Text style={[styles.cardText, { color: C.textSecondary, fontSize: 13 }, isRTL && styles.rtlText]}>{transcript}</Text>
-        </View>
-      ) : null}
-
-      {/* Agent Q&A */}
-      {transcript ? (
-        <View style={styles.card}>
-          <View style={styles.cardTitleRow}>
-            <View style={[styles.dot, { backgroundColor: C.pink }]} />
-            <Text style={styles.cardTitle}>AI Agent</Text>
-          </View>
-          <View style={{ height: 12 }} />
-          <View style={styles.agentInputRow}>
-            <TextInput
-              style={[styles.agentInput, isRTL && styles.rtlText]}
-              placeholder={t.askPlaceholder}
-              placeholderTextColor={C.textMuted}
-              value={agentTask}
-              onChangeText={setAgentTask}
-              multiline
-              textAlign={isRTL ? 'right' : 'left'}
-            />
-            <TouchableOpacity onPress={askAgent} style={styles.askBtn} disabled={agentLoading}>
-              {agentLoading
-                ? <ActivityIndicator size="small" color="#fff" />
-                : <MaterialCommunityIcons name="send" size={18} color="#fff" />
-              }
-            </TouchableOpacity>
-          </View>
-          {agentLoading && (
-            <View style={{ marginTop: 12 }}>
-              <ThinkingDots label={t.agentThinking} />
-            </View>
-          )}
-          {agentAnswer ? (
-            <View style={styles.agentAnswer}>
-              <MaterialCommunityIcons name="robot-outline" size={15} color={C.pink} style={{ marginBottom: 6 }} />
-              <Text style={[styles.cardText, isRTL && styles.rtlText]}>{agentAnswer}</Text>
-            </View>
-          ) : null}
-        </View>
-      ) : null}
-    </Animated.View>
-  );
-
-  const renderHistory = () => (
-    <View style={{ flex: 1 }}>
-      <View style={styles.historyHeader}>
-        <Text style={styles.sectionTitle}>{t.history}</Text>
-        {history.length > 0 && (
-          <TouchableOpacity onPress={clearHistory}>
-            <Text style={{ color: C.error, fontSize: 13 }}>{t.clearHistory}</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-      {history.length === 0 ? (
-        <View style={styles.emptyState}>
-          <MaterialCommunityIcons name="history" size={48} color={C.textMuted} />
-          <Text style={styles.emptyText}>{t.noHistory}</Text>
-        </View>
-      ) : (
-        <FlatList
-          data={history}
-          keyExtractor={i => String(i.id)}
-          contentContainerStyle={{ paddingBottom: 40 }}
-          renderItem={({ item }) => (
-            <TouchableOpacity onPress={() => setHistoryModal(item)} activeOpacity={0.85}>
-              <View style={[styles.historyItem]}>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.historyText, isRTL && styles.rtlText]} numberOfLines={3}>
-                    {item.summary}
-                  </Text>
-                  <Text style={styles.historyDate}>{item.date}</Text>
-                </View>
-                <MaterialCommunityIcons name="chevron-right" size={20} color={C.textMuted} />
-              </View>
-            </TouchableOpacity>
-          )}
-        />
-      )}
-    </View>
-  );
-
-  // History detail modal
-  const renderHistoryModal = () => (
-    <Modal visible={!!historyModal} animationType="slide" transparent>
-      <View style={styles.modalOverlay}>
-        <View style={styles.modalCard}>
-          <View style={styles.modalHandle} />
-          <ScrollView showsVerticalScrollIndicator={false}>
-            <Text style={styles.cardTitle}>{t.summary}</Text>
-            <Text style={[styles.cardText, { marginBottom: 20 }, isRTL && styles.rtlText]}>
-              {historyModal?.summary}
-            </Text>
-            <Text style={styles.cardTitle}>{t.transcript}</Text>
-            <Text style={[styles.cardText, { color: C.textSecondary, fontSize: 13 }, isRTL && styles.rtlText]}>
-              {historyModal?.transcript}
-            </Text>
-          </ScrollView>
-          <View style={styles.modalActions}>
-            <TouchableOpacity style={styles.modalBtn} onPress={() => copyText(historyModal?.summary)}>
-              <MaterialCommunityIcons name="content-copy" size={16} color={C.accent} />
-              <Text style={styles.modalBtnText}>{t.copy}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.modalBtn} onPress={() => shareText(historyModal?.summary)}>
-              <MaterialCommunityIcons name="share-variant" size={16} color={C.teal} />
-              <Text style={styles.modalBtnText}>{t.share}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.modalBtn, styles.modalClose]} onPress={() => setHistoryModal(null)}>
-              <Text style={{ color: C.textSecondary, fontSize: 14 }}>{t.close}</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-    </Modal>
-  );
-
   return (
     <View style={styles.root}>
       <StatusBar barStyle="light-content" backgroundColor={C.bg} />
 
-      {/* Background decoration */}
-      <View style={styles.bgBlob1} />
-      <View style={styles.bgBlob2} />
+      {/* Boot red line */}
+      <Animated.View style={{ height: 2, backgroundColor: C.accent, width: redlineW.interpolate({ inputRange:[0,1], outputRange:['0%','100%'] }), position:'absolute', top:0, left:0, zIndex:99 }} />
 
-      {/* Header */}
-      <Animated.View style={[styles.header, {
-        opacity: headerAnim,
-        transform: [{ translateY: headerAnim.interpolate({ inputRange: [0, 1], outputRange: [-20, 0] }) }],
-      }]}>
-        <View>
-          <Text style={styles.appName}>{t.appName}</Text>
-          <Text style={styles.tagline}>{t.tagline}</Text>
-        </View>
-        <TouchableOpacity onPress={() => setLang(l => l === 'he' ? 'en' : 'he')} style={styles.langBtn}>
-          <Text style={styles.langBtnText}>{lang === 'he' ? 'EN' : 'עב'}</Text>
-        </TouchableOpacity>
-      </Animated.View>
-
-      {/* Tabs */}
-      <View style={styles.tabs}>
-        {['main', 'history'].map(tab => (
-          <TouchableOpacity key={tab} onPress={() => setActiveTab(tab)} style={[styles.tab, activeTab === tab && styles.tabActive]}>
-            <MaterialCommunityIcons
-              name={tab === 'main' ? 'waveform' : 'history'}
-              size={16}
-              color={activeTab === tab ? C.accent : C.textMuted}
-            />
-            <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
-              {tab === 'main' ? t.appName : t.history}
-            </Text>
+      <Animated.View style={{ flex: 1, opacity: bootAnim }}>
+        {/* Header */}
+        <View style={styles.header}>
+          <View>
+            <GlitchText text={t.appName} style={styles.appName} />
+            <Text style={styles.appSub}>{`> ${t.sub}`}</Text>
+          </View>
+          <TouchableOpacity onPress={() => setLang(l => l === 'he' ? 'en' : 'he')} style={styles.langBtn}>
+            <Text style={styles.langBtnText}>{lang === 'he' ? 'EN' : 'עב'}</Text>
           </TouchableOpacity>
-        ))}
-      </View>
+        </View>
 
-      {/* Content */}
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView
-          contentContainerStyle={styles.scroll}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
-          {activeTab === 'main' ? (
-            <>
-              {renderUploadZone()}
-              <View style={{ height: 20 }} />
-              {loadingStep ? renderLoadingCards() : renderResultCards()}
-            </>
-          ) : renderHistory()}
-        </ScrollView>
-      </KeyboardAvoidingView>
+        {/* Divider */}
+        <View style={{ flexDirection:'row', alignItems:'center', paddingHorizontal:20, marginBottom:6 }}>
+          <View style={{ flex:1, height:1, backgroundColor:C.divider }} />
+          <View style={{ width:4, height:4, borderRadius:2, backgroundColor:C.accent, marginHorizontal:8 }} />
+          <View style={{ flex:1, height:1, backgroundColor:C.divider }} />
+        </View>
+
+        {/* Tabs */}
+        <View style={styles.tabs}>
+          {[{ key:'main', label:t.tabMain, icon:'radar', color:C.accent }, { key:'history', label:t.tabLog, icon:'database', color:C.gold }].map(tab => (
+            <TouchableOpacity key={tab.key} style={[styles.tab, activeTab === tab.key && { borderBottomColor: tab.color, borderBottomWidth: 2 }]} onPress={() => setActiveTab(tab.key)}>
+              <MaterialCommunityIcons name={tab.icon} size={14} color={activeTab === tab.key ? tab.color : C.textMuted} />
+              <Text style={[styles.tabText, { color: activeTab === tab.key ? tab.color : C.textMuted }]}>{tab.label.toUpperCase()}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <KeyboardAvoidingView style={{ flex:1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+            {activeTab === 'main' ? (
+              <>
+                {/* Upload */}
+                <TouchableOpacity onPress={handleUpload} activeOpacity={0.8}>
+                  <View style={styles.uploadZone}>
+                    <Corners color={C.accent} size={16} t={2} />
+                    <WaveForm active={false} />
+                    <Text style={styles.uploadTitle}>{t.uploadTitle}</Text>
+                    <Text style={styles.uploadSub}>{t.uploadSub}</Text>
+                    <View style={styles.shareHintRow}>
+                      <MaterialCommunityIcons name="whatsapp" size={13} color={C.success} />
+                      <Text style={styles.shareHint}>{t.shareHint}</Text>
+                    </View>
+                    {Platform.OS === 'ios' && <Text style={styles.iosNote}>{t.iosNote}</Text>}
+                  </View>
+                </TouchableOpacity>
+
+                <View style={{ height: 16 }} />
+
+                {/* Loading */}
+                {loadingStep ? (
+                  <View style={{ gap: 12 }}>
+                    <View style={styles.card}>
+                      <Corners color={C.gold} size={10} />
+                      <WaveForm active={true} />
+                      <View style={{ height: 12 }} />
+                      <ThinkingDots label={loadingStep === 'transcribing' ? t.transcribing : t.summarizing} />
+                      <View style={{ height: 12 }} />
+                      {[100,88,72,94,60].map((w,i) => <SkeletonLine key={i} w={`${w}%`} />)}
+                    </View>
+                    <View style={styles.card}>
+                      <Corners color={C.textMuted} size={10} />
+                      {[50,90,75].map((w,i) => <SkeletonLine key={i} w={`${w}%`} />)}
+                    </View>
+                  </View>
+                ) : (
+                  <View style={{ gap: 12 }}>
+                    {summary ? (
+                      <View style={styles.card}>
+                        <Corners color={C.gold} size={10} />
+                        <View style={styles.cardHeader}>
+                          <Text style={[styles.cardLabel, { color: C.gold }]}>{t.summary}</Text>
+                          <View style={{ flexDirection:'row', gap:4 }}>
+                            <TouchableOpacity onPress={() => copyText(summary)} style={styles.actionBtn}><MaterialCommunityIcons name="content-copy" size={15} color={C.textSecondary} /></TouchableOpacity>
+                            <TouchableOpacity onPress={() => Share.share({ message: summary })} style={styles.actionBtn}><MaterialCommunityIcons name="share-variant" size={15} color={C.textSecondary} /></TouchableOpacity>
+                          </View>
+                        </View>
+                        <Text style={[styles.cardText, isRTL && styles.rtl]}>{summary}</Text>
+                      </View>
+                    ) : null}
+
+                    {transcript ? (
+                      <View style={styles.card}>
+                        <Corners color={C.cyan} size={10} />
+                        <View style={styles.cardHeader}>
+                          <Text style={[styles.cardLabel, { color: C.cyan }]}>{t.transcript}</Text>
+                          <TouchableOpacity onPress={() => copyText(transcript)} style={styles.actionBtn}><MaterialCommunityIcons name="content-copy" size={15} color={C.textSecondary} /></TouchableOpacity>
+                        </View>
+                        <Text style={[styles.cardText, { color: C.textSecondary, fontSize: 12 }, isRTL && styles.rtl]}>{transcript}</Text>
+                      </View>
+                    ) : null}
+
+                    {transcript ? (
+                      <View style={styles.card}>
+                        <Corners color={C.accent} size={10} />
+                        <Text style={[styles.cardLabel, { color: C.accent, marginBottom: 12 }]}>// AGENT</Text>
+                        <View style={{ flexDirection:'row', gap:8, alignItems:'flex-end' }}>
+                          <TextInput
+                            style={[styles.agentInput, isRTL && styles.rtl]}
+                            placeholder={t.askPlaceholder} placeholderTextColor={C.textMuted}
+                            value={agentTask} onChangeText={setAgentTask}
+                            multiline textAlign={isRTL ? 'right' : 'left'}
+                          />
+                          <TouchableOpacity onPress={askAgent} style={styles.askBtn} disabled={agentLoading}>
+                            <MaterialCommunityIcons name="send" size={18} color={C.bg} />
+                          </TouchableOpacity>
+                        </View>
+                        {agentLoading && <View style={{ marginTop: 10 }}><ThinkingDots label={t.agentThinking} /></View>}
+                        {agentAnswer ? (
+                          <View style={styles.agentAnswer}>
+                            <Text style={[styles.cardLabel, { color: C.accent, marginBottom: 6, fontSize: 10 }]}>{'> OUTPUT'}</Text>
+                            <Text style={[styles.cardText, isRTL && styles.rtl]}>{agentAnswer}</Text>
+                          </View>
+                        ) : null}
+                      </View>
+                    ) : null}
+                  </View>
+                )}
+              </>
+            ) : (
+              /* History */
+              <View>
+                <View style={{ flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom:14 }}>
+                  <Text style={[styles.cardLabel, { color: C.gold, fontSize: 13 }]}>{`// ${t.history.toUpperCase()}`}</Text>
+                  {history.length > 0 && <TouchableOpacity onPress={clearHistory}><Text style={[styles.cardLabel, { color: C.accent }]}>{t.clearHistory}</Text></TouchableOpacity>}
+                </View>
+                {history.length === 0 ? (
+                  <View style={{ alignItems:'center', paddingVertical:60, gap:10 }}>
+                    <MaterialCommunityIcons name="database-off" size={40} color={C.textMuted} />
+                    <Text style={[styles.cardLabel, { color: C.textMuted }]}>{t.noHistory}</Text>
+                  </View>
+                ) : history.map(item => (
+                  <TouchableOpacity key={item.id} onPress={() => setHistoryModal(item)}>
+                    <View style={[styles.card, { flexDirection:'row', alignItems:'center', gap:10, marginBottom:10 }]}>
+                      <Corners color={C.textMuted} size={8} t={1} />
+                      <View style={{ flex:1 }}>
+                        <Text style={[styles.cardText, isRTL && styles.rtl]} numberOfLines={2}>{item.summary}</Text>
+                        <Text style={[styles.cardLabel, { color: C.accent, fontSize: 10, marginTop: 5 }]}>{`> ${item.date}`}</Text>
+                      </View>
+                      <MaterialCommunityIcons name="chevron-right" size={18} color={C.textMuted} />
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </Animated.View>
 
       {/* Toast */}
       {toast ? (
         <Animated.View style={[styles.toast, { opacity: toastAnim }]}>
-          <MaterialCommunityIcons name="check-circle" size={16} color={C.success} />
+          <MaterialCommunityIcons name="check" size={14} color={C.success} />
           <Text style={styles.toastText}>{toast}</Text>
         </Animated.View>
       ) : null}
 
-      {renderHistoryModal()}
+      {/* History Modal */}
+      <Modal visible={!!historyModal} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Corners color={C.gold} size={14} t={2} />
+            <View style={styles.modalHandle} />
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <Text style={[styles.cardLabel, { color: C.gold, marginBottom: 8 }]}>{t.summary}</Text>
+              <Text style={[styles.cardText, { marginBottom: 20 }, isRTL && styles.rtl]}>{historyModal?.summary}</Text>
+              <Text style={[styles.cardLabel, { color: C.cyan, marginBottom: 8 }]}>{t.transcript}</Text>
+              <Text style={[styles.cardText, { color: C.textSecondary, fontSize: 12 }, isRTL && styles.rtl]}>{historyModal?.transcript}</Text>
+            </ScrollView>
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={styles.modalBtn} onPress={() => copyText(historyModal?.summary)}>
+                <MaterialCommunityIcons name="content-copy" size={14} color={C.gold} />
+                <Text style={[styles.cardLabel, { color: C.gold }]}>{t.copy}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalBtn} onPress={() => Share.share({ message: historyModal?.summary })}>
+                <MaterialCommunityIcons name="share-variant" size={14} color={C.cyan} />
+                <Text style={[styles.cardLabel, { color: C.cyan }]}>{t.share}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.modalBtn, { borderColor:'transparent' }]} onPress={() => setHistoryModal(null)}>
+                <Text style={[styles.cardLabel, { color: C.textSecondary }]}>{t.close}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: C.bg,
-  },
-  bgBlob1: {
-    position: 'absolute', top: -80, left: -60,
-    width: 280, height: 280, borderRadius: 140,
-    backgroundColor: 'rgba(99,102,241,0.12)',
-  },
-  bgBlob2: {
-    position: 'absolute', bottom: 100, right: -80,
-    width: 240, height: 240, borderRadius: 120,
-    backgroundColor: 'rgba(45,212,191,0.08)',
-  },
-  header: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start',
-    paddingTop: 58, paddingHorizontal: 22, paddingBottom: 8,
-  },
-  appName: {
-    fontSize: 26, fontWeight: '800', color: C.textPrimary, letterSpacing: -0.5,
-  },
-  tagline: {
-    fontSize: 12, color: C.textMuted, marginTop: 2, letterSpacing: 0.3,
-  },
-  langBtn: {
-    paddingHorizontal: 14, paddingVertical: 7,
-    borderRadius: 20, borderWidth: 1, borderColor: C.bgCardBorder,
-    backgroundColor: C.bgCard,
-  },
-  langBtnText: {
-    color: C.accent, fontSize: 13, fontWeight: '700',
-  },
-  tabs: {
-    flexDirection: 'row', marginHorizontal: 20, marginTop: 10,
-    backgroundColor: 'rgba(255,255,255,0.04)',
-    borderRadius: 14, padding: 4, gap: 4,
-  },
-  tab: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    paddingVertical: 9, gap: 6, borderRadius: 10,
-  },
-  tabActive: {
-    backgroundColor: C.accentSoft,
-  },
-  tabText: {
-    fontSize: 13, color: C.textMuted, fontWeight: '500',
-  },
-  tabTextActive: {
-    color: C.accent, fontWeight: '700',
-  },
-  scroll: {
-    padding: 18, paddingBottom: 60,
-  },
-
-  // Upload zone
-  uploadZone: {
-    borderRadius: 24,
-    borderWidth: 1, borderStyle: 'dashed', borderColor: C.accentGlow,
-    backgroundColor: C.bgCard,
-    alignItems: 'center', paddingVertical: 38, paddingHorizontal: 24,
-    overflow: 'hidden',
-  },
-  uploadIconWrap: {
-    width: 90, height: 90, alignItems: 'center', justifyContent: 'center', marginBottom: 20,
-  },
-  uploadIconInner: {
-    width: 64, height: 64, borderRadius: 32,
-    backgroundColor: C.accentSoft, alignItems: 'center', justifyContent: 'center',
-  },
-  uploadTitle: {
-    fontSize: 18, fontWeight: '700', color: C.textPrimary, marginBottom: 6,
-  },
-  uploadSub: {
-    fontSize: 13, color: C.textSecondary,
-  },
-  shareHintRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 14,
-    backgroundColor: C.tealSoft, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20,
-  },
-  shareHint: {
-    fontSize: 12, color: C.teal,
-  },
-
-  // Cards
-  card: {
-    backgroundColor: C.bgCard,
-    borderRadius: 20, borderWidth: 1, borderColor: C.bgCardBorder,
-    padding: 18, marginBottom: 2,
-  },
-  cardHeader: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12,
-  },
-  cardTitleRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12,
-  },
-  dot: {
-    width: 8, height: 8, borderRadius: 4,
-  },
-  cardTitle: {
-    fontSize: 13, fontWeight: '700', color: C.textSecondary, textTransform: 'uppercase', letterSpacing: 0.8,
-  },
-  cardActions: {
-    flexDirection: 'row', gap: 4,
-  },
-  actionBtn: {
-    padding: 8, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.05)',
-  },
-  cardText: {
-    fontSize: 14, color: C.textPrimary, lineHeight: 22,
-  },
-  rtlText: {
-    textAlign: 'right', writingDirection: 'rtl',
-  },
-
-  // Agent
-  agentInputRow: {
-    flexDirection: 'row', gap: 10, alignItems: 'flex-end',
-  },
-  agentInput: {
-    flex: 1, backgroundColor: 'rgba(255,255,255,0.05)',
-    borderRadius: 14, borderWidth: 1, borderColor: C.bgCardBorder,
-    paddingHorizontal: 14, paddingVertical: 10,
-    color: C.textPrimary, fontSize: 14, maxHeight: 90,
-  },
-  askBtn: {
-    width: 44, height: 44, borderRadius: 14,
-    backgroundColor: C.accent, alignItems: 'center', justifyContent: 'center',
-  },
-  agentAnswer: {
-    marginTop: 14, padding: 14, borderRadius: 14,
-    backgroundColor: 'rgba(244,114,182,0.08)',
-    borderWidth: 1, borderColor: 'rgba(244,114,182,0.18)',
-  },
-
-  // History
-  historyHeader: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16,
-  },
-  sectionTitle: {
-    fontSize: 16, fontWeight: '700', color: C.textPrimary,
-  },
-  historyItem: {
-    backgroundColor: C.bgCard, borderRadius: 16,
-    borderWidth: 1, borderColor: C.bgCardBorder,
-    padding: 16, marginBottom: 10,
-    flexDirection: 'row', alignItems: 'center', gap: 10,
-  },
-  historyText: {
-    fontSize: 14, color: C.textPrimary, lineHeight: 20, marginBottom: 6,
-  },
-  historyDate: {
-    fontSize: 11, color: C.textMuted,
-  },
-  emptyState: {
-    alignItems: 'center', marginTop: 60, gap: 12,
-  },
-  emptyText: {
-    color: C.textMuted, fontSize: 15,
-  },
-
-  // Modal
-  modalOverlay: {
-    flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end',
-  },
-  modalCard: {
-    backgroundColor: '#161827', borderTopLeftRadius: 28, borderTopRightRadius: 28,
-    padding: 24, maxHeight: height * 0.75,
-    borderTopWidth: 1, borderColor: C.bgCardBorder,
-  },
-  modalHandle: {
-    width: 40, height: 4, borderRadius: 2,
-    backgroundColor: 'rgba(255,255,255,0.15)', alignSelf: 'center', marginBottom: 20,
-  },
-  modalActions: {
-    flexDirection: 'row', gap: 10, marginTop: 20, paddingTop: 16,
-    borderTopWidth: 1, borderColor: C.divider,
-  },
-  modalBtn: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 6, paddingVertical: 12, borderRadius: 14,
-    backgroundColor: 'rgba(255,255,255,0.06)', borderWidth: 1, borderColor: C.bgCardBorder,
-  },
-  modalBtnText: {
-    color: C.textPrimary, fontSize: 14, fontWeight: '600',
-  },
-  modalClose: {
-    backgroundColor: 'transparent', borderColor: 'transparent',
-  },
-
-  // Toast
-  toast: {
-    position: 'absolute', bottom: 30, alignSelf: 'center',
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: 'rgba(15,20,40,0.95)', paddingHorizontal: 20, paddingVertical: 12,
-    borderRadius: 24, borderWidth: 1, borderColor: C.bgCardBorder,
-  },
-  toastText: {
-    color: C.textPrimary, fontSize: 14, fontWeight: '600',
-  },
+  root: { flex:1, backgroundColor: C.bg },
+  header: { flexDirection:'row', justifyContent:'space-between', alignItems:'flex-start', paddingTop: Platform.OS === 'ios' ? 58 : 42, paddingHorizontal:20, paddingBottom:10 },
+  appName: { fontSize:32, fontWeight:'900', color: C.textPrimary, letterSpacing:4, fontFamily: MONO },
+  appSub: { fontSize:11, color: C.textSecondary, marginTop:2, letterSpacing:1, fontFamily: MONO },
+  langBtn: { borderWidth:1, borderColor: C.accent, paddingHorizontal:12, paddingVertical:6, borderRadius:2, backgroundColor: C.accentSoft },
+  langBtnText: { color: C.accent, fontSize:12, fontWeight:'700', fontFamily: MONO },
+  tabs: { flexDirection:'row', paddingHorizontal:20, gap:24, marginBottom:4 },
+  tab: { flexDirection:'row', alignItems:'center', gap:6, paddingVertical:8, paddingBottom:6, borderBottomWidth:2, borderBottomColor:'transparent' },
+  tabText: { fontSize:11, letterSpacing:1.5, fontFamily: MONO },
+  scroll: { padding:18, paddingBottom:60 },
+  uploadZone: { borderWidth:1, borderColor: C.accentGlow, borderStyle:'dashed', backgroundColor: C.accentSoft, borderRadius:4, alignItems:'center', paddingVertical:32, paddingHorizontal:20, gap:8, position:'relative', overflow:'hidden' },
+  uploadTitle: { fontSize:20, fontWeight:'900', color: C.textPrimary, letterSpacing:3, marginTop:8, fontFamily: MONO },
+  uploadSub: { fontSize:12, color: C.textSecondary, letterSpacing:0.5 },
+  shareHintRow: { flexDirection:'row', alignItems:'center', gap:5, marginTop:8, backgroundColor:'rgba(57,255,20,0.08)', paddingHorizontal:12, paddingVertical:5, borderRadius:2 },
+  shareHint: { fontSize:11, color: C.success },
+  iosNote: { fontSize:10, color: C.gold, marginTop:6, textAlign:'center', opacity:0.7, fontFamily: MONO },
+  card: { backgroundColor: C.bgCard, borderWidth:1, borderColor: C.bgCardBorder, borderRadius:4, padding:16, position:'relative', overflow:'hidden' },
+  cardHeader: { flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom:10 },
+  cardLabel: { fontSize:11, letterSpacing:1.5, fontWeight:'700', fontFamily: MONO },
+  cardText: { fontSize:14, color: C.textPrimary, lineHeight:22 },
+  actionBtn: { padding:7, backgroundColor:'rgba(255,255,255,0.04)', borderRadius:2 },
+  rtl: { textAlign:'right', writingDirection:'rtl' },
+  agentInput: { flex:1, backgroundColor: C.bgPanel, borderWidth:1, borderColor: C.bgCardBorder, borderRadius:2, paddingHorizontal:12, paddingVertical:9, color: C.textPrimary, fontSize:13, maxHeight:80, fontFamily: MONO },
+  askBtn: { width:42, height:42, borderRadius:2, backgroundColor: C.accent, alignItems:'center', justifyContent:'center' },
+  agentAnswer: { marginTop:12, padding:12, borderRadius:2, backgroundColor:'rgba(255,45,78,0.07)', borderWidth:1, borderColor:'rgba(255,45,78,0.2)' },
+  toast: { position:'absolute', bottom:32, alignSelf:'center', flexDirection:'row', alignItems:'center', gap:7, backgroundColor: C.bgCard, paddingHorizontal:18, paddingVertical:10, borderRadius:2, borderWidth:1, borderColor: C.success },
+  toastText: { color: C.success, fontSize:13, fontFamily: MONO },
+  modalOverlay: { flex:1, backgroundColor:'rgba(0,0,0,0.85)', justifyContent:'flex-end' },
+  modalCard: { backgroundColor:'#0e1018', borderTopLeftRadius:6, borderTopRightRadius:6, padding:22, maxHeight: height * 0.75, borderTopWidth:2, borderColor: C.accent, position:'relative' },
+  modalHandle: { width:32, height:3, backgroundColor: C.accent, alignSelf:'center', marginBottom:18 },
+  modalActions: { flexDirection:'row', gap:8, marginTop:18, paddingTop:14, borderTopWidth:1, borderColor: C.divider },
+  modalBtn: { flex:1, flexDirection:'row', alignItems:'center', justifyContent:'center', gap:5, paddingVertical:11, borderRadius:2, backgroundColor:'rgba(255,255,255,0.04)', borderWidth:1, borderColor: C.bgCardBorder },
 });

@@ -1,0 +1,33 @@
+{
+  "expo": {
+    "name": "Voice AI Agent",
+    "slug": "voice-summary-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "android": {
+      "package": "com.itai.voicesummary",
+      "intentFilters": [
+        {
+          "action": "SEND",
+          "category": ["DEFAULT"],
+          "data": {
+            "mimeType": "audio/*"
+          }
+        }
+      ]
+    },
+    "ios": {
+      "bundleIdentifier": "com.itai.voicesummary",
+      "infoPlist": {
+        "CFBundleDocumentTypes": [
+          {
+            "CFBundleTypeName": "Audio",
+            "LSItemContentTypes": ["public.audio"]
+          }
+        ]
+      }
+    }
+  }
+}

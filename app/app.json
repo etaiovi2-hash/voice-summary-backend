@@ -4,54 +4,8 @@
     "slug": "voice-ai-agent",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
-    "splash": {
-      "image": "./assets/splash.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#080a0f"
-    },
-    "assetBundlePatterns": ["**/*"],
-    "ios": {
-      "supportsTablet": false,
-      "bundleIdentifier": "com.yourname.voiceaiagent",
-      "infoPlist": {
-        "UIFileSharingEnabled": true,
-        "LSSupportsOpeningDocumentsInPlace": true,
-        "CFBundleDocumentTypes": [
-          {
-            "CFBundleTypeName": "Audio Files",
-            "LSItemContentTypes": [
-              "public.audio",
-              "public.mp3",
-              "public.mpeg-4-audio",
-              "org.xiph.ogg",
-              "com.apple.m4a-audio",
-              "public.aiff-audio",
-              "com.microsoft.waveform-audio"
-            ],
-            "CFBundleTypeRole": "Viewer"
-          }
-        ],
-        "UTExportedTypeDeclarations": [],
-        "UTImportedTypeDeclarations": [
-          {
-            "UTTypeIdentifier": "org.xiph.ogg",
-            "UTTypeDescription": "OGG Audio",
-            "UTTypeConformsTo": ["public.audio"],
-            "UTTypeTagSpecification": {
-              "public.filename-extension": ["ogg", "oga"],
-              "public.mime-type": ["audio/ogg", "audio/x-ogg"]
-            }
-          }
-        ]
-      }
-    },
     "android": {
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#080a0f"
-      },
       "package": "com.yourname.voiceaiagent",
       "permissions": [
         "READ_EXTERNAL_STORAGE",
@@ -63,46 +17,23 @@
         {
           "action": "android.intent.action.SEND",
           "data": [
-            { "mimeType": "audio/*" },
-            { "mimeType": "audio/ogg" },
-            { "mimeType": "audio/mp4" },
-            { "mimeType": "audio/mpeg" },
-            { "mimeType": "audio/m4a" },
-            { "mimeType": "audio/x-m4a" },
-            { "mimeType": "audio/aac" },
-            { "mimeType": "audio/wav" },
-            { "mimeType": "audio/3gpp" },
-            { "mimeType": "audio/amr" }
+            {
+              "mimeType": "audio/*"
+            }
           ],
           "category": [
-            "android.intent.category.DEFAULT",
-            "android.intent.category.BROWSABLE"
-          ]
-        },
-        {
-          "action": "android.intent.action.VIEW",
-          "data": [
-            { "mimeType": "audio/*" }
-          ],
-          "category": [
-            "android.intent.category.DEFAULT",
-            "android.intent.category.BROWSABLE"
+            "android.intent.category.DEFAULT"
           ]
         }
       ]
     },
-    "web": {
-      "favicon": "./assets/favicon.png"
-    },
     "plugins": [
-      "expo-document-picker",
-      [
-        "expo-file-system",
-        {}
-      ]
+      "expo-document-picker"
     ],
     "extra": {
-      "apiUrl": "https://voice-summary-backend.vercel.app/api/transcribe"
+      "eas": {
+        "projectId": "775a1a12-816c-4c37-9922-aaa416d4c567"
+      }
     }
   }
 }
